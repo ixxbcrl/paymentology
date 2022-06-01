@@ -21,7 +21,9 @@ repositories {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.apache.poi:poi-ooxml:5.2.2'
+    implementation 'com.opencsv:opencsv:5.6'
     implementation 'org.jxls:jxls-jexcel:1.0.9'
+
     compileOnly 'org.projectlombok:lombok'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     annotationProcessor 'org.projectlombok:lombok'
