@@ -1,6 +1,9 @@
 package com.project.paymentology.application.command;
 
-import com.opencsv.*;
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
 import com.opencsv.exceptions.CsvValidationException;
 import com.project.paymentology.apis.dtos.TransactionReconcileDto;
 import org.springframework.stereotype.Service;
@@ -9,47 +12,76 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 public class TransactionReconciliationCommandService {
 
     public Map<String, List<String>> reconcile(MultipartFile fileOne, MultipartFile fileTwo) {
-        List<List<String>> result = new ArrayList<>();
-        List<String> unmatchedFileOne = new ArrayList<>();
-        List<String> unmatchedFileTwo = new ArrayList<>();
-        Map<String, List<List<String>>> mapOne = new HashMap<>();
-        Map<String, List<List<String>>> mapTwo = new HashMap<>();
-        int total = 0;
         List<TransactionReconcileDto> reconciledResult = new ArrayList<>();
         List<TransactionReconcileDto> unmatchedFileOne1 = new ArrayList<>();
         List<TransactionReconcileDto> unmatchedFileTwo1 = new ArrayList<>();
-        Map<String, List<TransactionReconcileDto>> mapOne1 = new HashMap<>();
-        Map<String, List<TransactionReconcileDto>> mapTwo1 = new HashMap<>();
+        Map<String, List<TransactionReconcileDto>> parsedDtoMapFileOne = new HashMap<>();
+        Map<String, List<TransactionReconcileDto>> parsedDtoMapFileTwo = new HashMap<>();
+
+        parsedDtoMapFileOne = parseFileToMap(fileOne);
+        parsedDtoMapFileTwo = parseFileToMap(fileTwo);
+        reconcileParsedFiles(parsedDtoMapFileOne, parsedDtoMapFileTwo);
+
+        System.out.println("final map1 size: " + parsedDtoMapFileOne.size());
+        System.out.println("final map2 size: " + parsedDtoMapFileTwo.size());
+
+        //print one
+        for (Map.Entry<String, List<TransactionReconcileDto>> lst : parsedDtoMapFileOne.entrySet()) {
+            String key = lst.getKey();
+            List<TransactionReconcileDto> lstValue = lst.getValue();
+            if (lstValue.size() > 1) {
+                System.out.println("YOYOYOYOYOYO");
+            }
+
+            for (TransactionReconcileDto val : lstValue) {
+                System.out.println("Key mapOne1: " + key);
+                System.out.println("mapOne1 val: " + val);
+            }
+        }
+
+        //print two
+        for (Map.Entry<String, List<TransactionReconcileDto>> lst : parsedDtoMapFileTwo.entrySet()) {
+            String key = lst.getKey();
+            List<TransactionReconcileDto> lstValue = lst.getValue();
+            if (lstValue.size() > 1) {
+                System.out.println("YOYOYOYOYOYO");
+            }
+
+            for (TransactionReconcileDto val : lstValue) {
+                System.out.println("Key mapTwo1: " + key);
+                System.out.println("mapTwo1 val: " + val);
+            }
+        }
+        return new HashMap<>();
+    }
+
+    private Map<String, List<TransactionReconcileDto>> parseFileToMap(MultipartFile file) {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        Map<String, List<TransactionReconcileDto>> parsedDtoMap = new HashMap<>();
+        String[] values;
 
         try {
-            String[] values;
             CSVParser parser = new CSVParserBuilder()
                     .withSeparator(',')
                     .withIgnoreQuotations(true)
                     .build();
 
-            CSVReader csvReader = new CSVReaderBuilder(new InputStreamReader(fileOne.getInputStream()))
-                    .withSkipLines(1)
-                    .withCSVParser(parser)
-                    .build();
-            CSVReader csvReaderTwo = new CSVReaderBuilder(new InputStreamReader(fileTwo.getInputStream()))
+            CSVReader csvReader = new CSVReaderBuilder(new InputStreamReader(file.getInputStream()))
                     .withSkipLines(1)
                     .withCSVParser(parser)
                     .build();
 
-            //Parsing first file
             while ((values = csvReader.readNext()) != null) {
                 List<String> cur = Arrays.asList(values);
                 TransactionReconcileDto dto = TransactionReconcileDto.builder()
-                        .profileName(cur.get(0))
-                        .transactionDate(LocalDateTime.parse(cur.get(1)))
+                        .transactionDate(LocalDateTime.parse(cur.get(1), formatter))
                         .transactionAmount(Double.parseDouble(cur.get(2)))
                         .transactionNarrative(cur.get(3))
                         .transactionDescription(cur.get(4))
@@ -57,87 +89,64 @@ public class TransactionReconciliationCommandService {
                         .transactionType(Integer.parseInt(cur.get(6)))
                         .walletReference(cur.get(7))
                         .build();
-//                mapOne.putIfAbsent(cur.get(5), new ArrayList<>());
-//                mapOne.get(cur.get(5)).add(cur);
-                mapOne1.putIfAbsent(dto.getTransactionID(), new ArrayList<>());
-                mapOne1.get(dto.getTransactionID()).add(dto);
-                ++total;
+                parsedDtoMap.putIfAbsent(dto.getTransactionID(), new ArrayList<>());
+                parsedDtoMap.get(dto.getTransactionID()).add(dto);
             }
-
-            //Parsing second file
-            while ((values = csvReaderTwo.readNext()) != null) {
-                List<String> cur = Arrays.asList(values);
-                mapTwo.putIfAbsent(cur.get(5), new ArrayList<>());
-                mapTwo.get(cur.get(5)).add(cur);
-            }
-
-            Iterator<Map.Entry<String, List<List<String>>>> it = mapOne.entrySet().iterator();
-            while (it.hasNext()) {
-                Map.Entry<String, List<List<String>>> item = it.next();
-//            for (String keyOne : mapOne.keySet()) {
-                if (mapTwo.get(item.getKey()) != null) {
-                    if (result.size() > 1) {
-                        result.add(mapOne.get(item.getKey())
-                                .stream()
-                                .flatMap(Collection::stream)
-                                .collect(Collectors.toList()));
-                    } else {
-                        result.add(mapOne.get(item.getKey()).get(0));
-                    }
-                    mapTwo.remove(item.getKey());
-//                    mapOne.remove(keyOne);
-                    it.remove();
-                } else {
-                    unmatchedFileOne.addAll(item.getValue()
-                            .stream()
-                            .flatMap(Collection::stream)
-                            .collect(Collectors.toList()));
-                }
-//            }
-            }
-
-//            for (List<String> lst : result) {
-//                System.out.println("Matchedd: " + lst.get(5));
-//            }
-            for (Map.Entry<String, List<List<String>>> lst : mapTwo.entrySet()) {
-                unmatchedFileTwo.addAll(lst.getValue()
-                        .stream()
-                        .flatMap(Collection::stream)
-                        .collect(Collectors.toList()));
-            }
-            System.out.println("final map1 size: " + mapOne.size());
-            System.out.println("final map2 size: " + mapTwo.size());
-
-//            for (Map.Entry<String, List<List<String>>> lst : mapOne.entrySet()) {
-//                String key = lst.getKey();
-//                List<List<String>> val = lst.getValue();
-//                if (val.size() > 1) {
-//                    System.out.println("YOYOYOYOYOYO");
-//                }
-//
-//                 for (List<String> it : val) {
-//                     System.out.println("Key is: " + key);
-//                     System.out.println("tizz val: " + it);
-//                 }
-//            }
-//            System.out.println("totalll: " + total);
-
         } catch (IOException | CsvValidationException e) {
             e.printStackTrace();
         }
 
-//        try (CSVReader csvReader = new CSVReader(new InputStreamReader(fileOne.getInputStream()))) {
-//            String[] values;
-//            int firstRow = 0;
+        return parsedDtoMap;
+    }
+
+    private void reconcileParsedFiles(Map<String, List<TransactionReconcileDto>> mapOne,
+                                      Map<String, List<TransactionReconcileDto>> mapTwo) {
+        Iterator<Map.Entry<String, List<TransactionReconcileDto>>> mapOneEntrySet = mapOne.entrySet().iterator();
+        while (mapOneEntrySet.hasNext()) {
+            Map.Entry<String, List<TransactionReconcileDto>> mapOneEntry = mapOneEntrySet.next();
+            List<TransactionReconcileDto> mapOneEntryValue = mapOneEntry.getValue();
+            if (mapTwo.get(mapOneEntry.getKey()) != null) {
+                List<TransactionReconcileDto> mapTwoEntryValue = mapTwo.get(mapOneEntry.getKey());
+                if (mapOneEntryValue.size() > 1) {
+//                    for (Iterator<TransactionReconcileDto> entryOneItr = mapOneEntryValue.iterator(); entryOneItr.hasNext();) {
+                    for (int i=0; i<mapOneEntryValue.size(); ++i) {
+                        int highestWeight = 0;
+
+//                        for (Iterator<TransactionReconcileDto> entryTwoItr = mapTwoEntryValue.iterator(); entryTwoItr.hasNext();) {
+//                            TransactionReconcileDto entryOne = entryOneItr.next();
+//                            TransactionReconcileDto entryTwo = entryTwoItr.next();
 //
-//            while ((values = csvReader.readNext()) != null) {
-//                records.add(Arrays.asList(values));
-//                record.put()
+//                            //If the objects are exactly the same, we remove them
+//                            if (entryOne.weightedCompare(entryTwo) == 0) {
+//                                entryOneItr.remove();
+//                                entryTwoItr.remove();
+//                            } else if (entryOne.weightedCompare(entryTwo))
+                        }
+                    }
+                }
+//                if (item.getValue().size() > 1) {
+//                    reconciledResult.addAll(item.getValue());
+//                } else {
+//                    reconciledResult.add(item.getValue().get(0));
+//                }
+                mapTwo.remove(mapOneEntry.getKey());
+                mapOneEntrySet.remove();
+            }
+//            else {
+//                unmatchedFileOne1.addAll(item.getValue());
 //            }
-//        } catch (IOException | CsvValidationException e) {
-//            System.out.println("Error parsing input file(s)");
-//            e.printStackTrace();
-//        }
-        return new HashMap<>();
+        }
+    }
+
+    /**
+     * We rank each property based on a simple weighted scale as follows:
+     * WalletReference - 6
+     * TransactionAmount - 5
+     * TransactionDate - 3
+     * TransactionType - 3
+     * TransactionDescription - 3
+     * TransactionNarrative - 1
+     */
+    private int reconcileRow(TransactionReconcileDto listOne, TransactionReconcileDto listTwo) {
     }
 }
