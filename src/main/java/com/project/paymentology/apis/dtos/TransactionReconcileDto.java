@@ -35,14 +35,15 @@ public class TransactionReconcileDto {
      * TransactionType - 3
      * TransactionDescription - 3
      * TransactionNarrative - 1
+     * Cumulative weighted value = 21
      */
     public int weightedCompare(TransactionReconcileDto toCompare) {
         int total=0;
         if (this.walletReference.equals(toCompare.walletReference)) total+=6;
         if (this.transactionAmount == toCompare.getTransactionAmount()) total+=5;
-        if (this.transactionDate.equals(toCompare.getTransactionDate())) total+=2;
-        if (this.transactionDescription.equals(toCompare.transactionDescription)) total+=2;
-        if (this.transactionType == toCompare.getTransactionType()) total+=2;
+        if (this.transactionDate.equals(toCompare.getTransactionDate())) total+=3;
+        if (this.transactionDescription.equals(toCompare.transactionDescription)) total+=3;
+        if (this.transactionType == toCompare.getTransactionType()) total+=3;
         if (this.transactionNarrative.equals(toCompare.getTransactionNarrative())) total+=1;
 
         return total;

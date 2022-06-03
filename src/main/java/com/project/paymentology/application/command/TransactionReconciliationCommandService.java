@@ -94,6 +94,7 @@ public class TransactionReconciliationCommandService {
             }
         } catch (IOException | CsvValidationException e) {
             e.printStackTrace();
+            System.out.println("ERRRORR!!: " + e.getMessage());
         }
 
         return parsedDtoMap;
@@ -102,51 +103,69 @@ public class TransactionReconciliationCommandService {
     private void reconcileParsedFiles(Map<String, List<TransactionReconcileDto>> mapOne,
                                       Map<String, List<TransactionReconcileDto>> mapTwo) {
         Iterator<Map.Entry<String, List<TransactionReconcileDto>>> mapOneEntrySet = mapOne.entrySet().iterator();
+        Map<String, List<TransactionReconcileDto>> mapOneCloseMatch = new HashMap<>();
+        Map<String, List<TransactionReconcileDto>> mapTwoCloseMatch = new HashMap<>();
+
+        int closeMatchCounter = 0;
         while (mapOneEntrySet.hasNext()) {
             Map.Entry<String, List<TransactionReconcileDto>> mapOneEntry = mapOneEntrySet.next();
             List<TransactionReconcileDto> mapOneEntryValue = mapOneEntry.getValue();
             if (mapTwo.get(mapOneEntry.getKey()) != null) {
                 List<TransactionReconcileDto> mapTwoEntryValue = mapTwo.get(mapOneEntry.getKey());
-                if (mapOneEntryValue.size() > 1) {
-//                    for (Iterator<TransactionReconcileDto> entryOneItr = mapOneEntryValue.iterator(); entryOneItr.hasNext();) {
-                    for (int i=0; i<mapOneEntryValue.size(); ++i) {
-                        int highestWeight = 0;
+                if (mapOneEntryValue.size() > 1 || mapTwoEntryValue.size() > 1) {
+                    for (Iterator<TransactionReconcileDto> entryOneItr = mapOneEntryValue.iterator(); entryOneItr.hasNext(); ) {
+//                    for (int i=0; i<mapOneEntryValue.size(); ++i) {
+                        int mapTwoToRemove = -1;
+                        TransactionReconcileDto entryOne = entryOneItr.next();
 
 //                        for (Iterator<TransactionReconcileDto> entryTwoItr = mapTwoEntryValue.iterator(); entryTwoItr.hasNext();) {
-//                            TransactionReconcileDto entryOne = entryOneItr.next();
-//                            TransactionReconcileDto entryTwo = entryTwoItr.next();
-//
-//                            //If the objects are exactly the same, we remove them
-//                            if (entryOne.weightedCompare(entryTwo) == 0) {
-//                                entryOneItr.remove();
-//                                entryTwoItr.remove();
-//                            } else if (entryOne.weightedCompare(entryTwo))
+                        for (int i = 0; i < mapTwoEntryValue.size(); ++i) {
+                            TransactionReconcileDto mapTwoValue = mapTwoEntryValue.get(i);
+                            int weightedCompareValue = entryOne.weightedCompare(mapTwoValue);
+
+                            //If the objects are exactly the same, we remove them
+                            if (weightedCompareValue == 21) {
+                                entryOneItr.remove();
+                                mapTwoToRemove = i;
+                                break;
+                            } else if (weightedCompareValue >= 10) {
+                                System.out.println("KeyOne : " + mapOneEntry.getKey() + " -- " + weightedCompareValue);
+                                String closeMatchCounterStr = String.format("%10s", closeMatchCounter).replace(' ', 'x');
+                                mapOneCloseMatch.put(closeMatchCounterStr, Collections.singletonList(entryOne));
+                                mapTwoCloseMatch.putIfAbsent(closeMatchCounterStr, new ArrayList<>());
+                                mapTwoCloseMatch.get(closeMatchCounterStr).add(mapTwoValue);
+//                                ++closeMatchCounter;
+                            }
                         }
+
+                        if (mapTwoToRemove>=0) {
+                            mapTwoEntryValue.remove(mapTwoToRemove);
+                        }
+//                    }
                     }
-                }
 //                if (item.getValue().size() > 1) {
 //                    reconciledResult.addAll(item.getValue());
 //                } else {
 //                    reconciledResult.add(item.getValue().get(0));
 //                }
-                mapTwo.remove(mapOneEntry.getKey());
-                mapOneEntrySet.remove();
-            }
-//            else {
-//                unmatchedFileOne1.addAll(item.getValue());
-//            }
-        }
-    }
+//                    mapTwo.remove(mapOneEntry.getKey());
 
-    /**
-     * We rank each property based on a simple weighted scale as follows:
-     * WalletReference - 6
-     * TransactionAmount - 5
-     * TransactionDate - 3
-     * TransactionType - 3
-     * TransactionDescription - 3
-     * TransactionNarrative - 1
-     */
-    private int reconcileRow(TransactionReconcileDto listOne, TransactionReconcileDto listTwo) {
+                    if (mapTwoEntryValue.isEmpty()) {
+                        mapTwo.remove(mapOneEntry.getKey());
+                    }
+                    if (mapOneEntryValue.isEmpty()) {
+                        mapOneEntrySet.remove();
+                    }
+                    ++closeMatchCounter;
+                } else {
+                    mapOneEntrySet.remove();
+                    mapTwo.remove(mapOneEntry.getKey());
+                    //TO-DO here
+                }
+            }
+        }
+
+        mapOne.putAll(mapOneCloseMatch);
+        mapTwo.putAll(mapTwoCloseMatch);
     }
 }
