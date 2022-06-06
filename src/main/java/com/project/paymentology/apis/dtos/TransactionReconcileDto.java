@@ -27,6 +27,9 @@ public class TransactionReconcileDto {
 
     private String walletReference;
 
+    //to store the weightedCompare score
+    public int weightedCompare;
+
     /**
      * We rank each property based on a simple weighted scale as follows:
      * WalletReference - 6
