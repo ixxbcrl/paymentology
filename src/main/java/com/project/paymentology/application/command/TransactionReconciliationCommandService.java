@@ -37,16 +37,6 @@ public class TransactionReconciliationCommandService {
         parsedDtoMapFileTwo = parseFileToMap(fileTwo);
         resultDtos = reconcileParsedFiles(parsedDtoMapFileOne, parsedDtoMapFileTwo);
 
-        System.out.println("parsedDtoMapFileOne size: " + parsedDtoMapFileOne.size());
-        System.out.println("parsedDtoMapFileTwo size: " + parsedDtoMapFileTwo.size());
-
-        for (TransactionReconcileResponseDto dto : resultDtos) {
-            System.out.println("DTO source: " + dto.sourceFile + " -- " + "DTO unmatched: " + dto.unmatchedTransaction);
-            if (dto.exactMatchTransaction != null)
-                System.out.println("DTO exact: " + dto.exactMatchTransaction);
-            if (dto.closeMatches != null)
-                System.out.println("DTO close match size: " + dto.closeMatches.size());
-        }
         return resultDtos;
     }
 
@@ -81,7 +71,6 @@ public class TransactionReconciliationCommandService {
                 parsedDtoMap.get(dto.getTransactionID()).add(dto);
             }
         } catch (IOException | CsvValidationException e) {
-            e.printStackTrace();
             log.error(String.format("An unexpected error occurred while parsing the files: %s", e.getMessage()), e);
             throw new BadRequestException(ErrorCode.FILE_OPERATION_FAILED, "An unexpected error occurred while parsing the files");
         }
@@ -111,13 +100,13 @@ public class TransactionReconciliationCommandService {
 
             for (TransactionReconcileDto dtoTwo : mapTwoVal) {
                 int weightedCompare = dtoOne.weightedCompare(dtoTwo);
-                dtoTwo.weightedCompare = Math.max(dtoTwo.weightedCompare, weightedCompare);
 
-                if (weightedCompare == TRANSACTION_COMPLETE_MATCH) {
+                if (weightedCompare == TRANSACTION_COMPLETE_MATCH && dtoTwo.weightedCompare != TRANSACTION_COMPLETE_MATCH) {
                     responseDto.exactMatchTransaction = dtoTwo;
                 } else if (weightedCompare >= TRANSACTION_CLOSE_MATCH) {
                     responseDto.closeMatches.add(dtoTwo);
                 }
+                dtoTwo.weightedCompare = Math.max(dtoTwo.weightedCompare, weightedCompare);
             }
 
             List<TransactionReconcileResponseDto> mapTwoUnmatched = mapTwoVal.stream()
