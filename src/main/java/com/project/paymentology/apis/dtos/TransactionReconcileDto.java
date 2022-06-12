@@ -27,6 +27,8 @@ public class TransactionReconcileDto {
 
     private String walletReference;
 
+    private long lineNumber;
+
     //to store the weightedCompare score
     public int weightedCompare;
 

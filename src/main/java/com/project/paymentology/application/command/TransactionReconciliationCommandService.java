@@ -8,6 +8,7 @@ import com.opencsv.exceptions.CsvValidationException;
 import com.project.paymentology.apis.common.ErrorCode;
 import com.project.paymentology.apis.dtos.TransactionReconcileDto;
 import com.project.paymentology.apis.dtos.TransactionReconcileResponseDto;
+import com.project.paymentology.apis.dtos.TransactionReconcileSummaryDto;
 import com.project.paymentology.application.exception.BadRequestException;
 import com.project.paymentology.application.exception.WebServiceException;
 import org.springframework.stereotype.Service;
@@ -28,10 +29,10 @@ public class TransactionReconciliationCommandService {
     public static final int TRANSACTION_CLOSE_MATCH = 10;
     public static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    public List<TransactionReconcileResponseDto> reconcile(MultipartFile fileOne, MultipartFile fileTwo) {
+    public TransactionReconcileSummaryDto reconcile(MultipartFile fileOne, MultipartFile fileTwo) {
         Map<String, List<TransactionReconcileDto>> parsedDtoMapFileOne;
         Map<String, List<TransactionReconcileDto>> parsedDtoMapFileTwo;
-        List<TransactionReconcileResponseDto> resultDtos;
+        TransactionReconcileSummaryDto resultDtos;
 
         parsedDtoMapFileOne = parseFileToMap(fileOne);
         parsedDtoMapFileTwo = parseFileToMap(fileTwo);
@@ -65,11 +66,14 @@ public class TransactionReconciliationCommandService {
                         .transactionID(cur.get(5))
                         .transactionType(Integer.parseInt(cur.get(6)))
                         .walletReference(cur.get(7))
+                        .lineNumber(csvReader.getLinesRead())
                         .weightedCompare(0)
                         .build();
                 parsedDtoMap.putIfAbsent(dto.getTransactionID(), new ArrayList<>());
                 parsedDtoMap.get(dto.getTransactionID()).add(dto);
             }
+
+
         } catch (IOException | CsvValidationException e) {
             log.error(String.format("An unexpected error occurred while parsing the files: %s", e.getMessage()), e);
             throw new BadRequestException(ErrorCode.FILE_OPERATION_FAILED, "An unexpected error occurred while parsing the files");
@@ -78,35 +82,46 @@ public class TransactionReconciliationCommandService {
         return parsedDtoMap;
     }
 
-    private List<TransactionReconcileResponseDto> weightedCompareLists(List<TransactionReconcileDto> mapOneVal, List<TransactionReconcileDto> mapTwoVal) {
+    private void weightedCompareLists(List<TransactionReconcileDto> mapOneVal,
+                                                                       List<TransactionReconcileDto> mapTwoVal,
+                                                                       TransactionReconcileSummaryDto summaryDto) {
         List<TransactionReconcileResponseDto> responseDtos = new ArrayList<>();
 
-        //return mapOne values if mapTwo is null. Means all mapOne values are unmatched.
         if (mapTwoVal == null) {
-            return mapOneVal.stream()
+            summaryDto.incrementFileOneUnmatchedRecords();
+            responseDtos = mapOneVal.stream()
                     .map(dto -> TransactionReconcileResponseDto.builder()
                             .unmatchedTransaction(dto)
                             .sourceFile("One")
-                            .build())
-                    .collect(Collectors.toList());
-        }
+                            .build()).toList();
+            summaryDto.getTransactionReconcileResponseDto().addAll(responseDtos);
+            summaryDto.setFileOneTotalRecords(summaryDto.getFileOneTotalRecords() + responseDtos.size());
+        } else {
+            for (TransactionReconcileDto dtoOne : mapOneVal) {
+                TransactionReconcileResponseDto responseDto = TransactionReconcileResponseDto.builder()
+                        .unmatchedTransaction(dtoOne)
+                        .closeMatches(new ArrayList<>())
+                        .sourceFile("One")
+                        .build();
+                summaryDto.incrementFileOneTotalRecords();
 
-        for (TransactionReconcileDto dtoOne : mapOneVal) {
-            TransactionReconcileResponseDto responseDto = TransactionReconcileResponseDto.builder()
-                    .unmatchedTransaction(dtoOne)
-                    .closeMatches(new ArrayList<>())
-                    .sourceFile("One")
-                    .build();
+                for (TransactionReconcileDto dtoTwo : mapTwoVal) {
+                    int weightedCompare = dtoOne.weightedCompare(dtoTwo);
 
-            for (TransactionReconcileDto dtoTwo : mapTwoVal) {
-                int weightedCompare = dtoOne.weightedCompare(dtoTwo);
-
-                if (weightedCompare == TRANSACTION_COMPLETE_MATCH && dtoTwo.weightedCompare != TRANSACTION_COMPLETE_MATCH) {
-                    responseDto.exactMatchTransaction = dtoTwo;
-                } else if (weightedCompare >= TRANSACTION_CLOSE_MATCH) {
-                    responseDto.closeMatches.add(dtoTwo);
+                    if (weightedCompare == TRANSACTION_COMPLETE_MATCH && dtoTwo.weightedCompare != TRANSACTION_COMPLETE_MATCH) {
+                        responseDto.exactMatchTransaction = dtoTwo;
+                        summaryDto.incrementMatchingRecords();
+                        dtoTwo.weightedCompare = Math.max(dtoTwo.weightedCompare, weightedCompare);
+                        break;
+                    } else if (weightedCompare >= TRANSACTION_CLOSE_MATCH) {
+                        responseDto.closeMatches.add(dtoTwo);
+                        dtoTwo.weightedCompare = Math.max(dtoTwo.weightedCompare, weightedCompare);
+                    }
                 }
-                dtoTwo.weightedCompare = Math.max(dtoTwo.weightedCompare, weightedCompare);
+
+                if (responseDto.exactMatchTransaction == null) {
+                    responseDtos.add(responseDto);
+                }
             }
 
             List<TransactionReconcileResponseDto> mapTwoUnmatched = mapTwoVal.stream()
@@ -114,39 +129,45 @@ public class TransactionReconciliationCommandService {
                     .map(dto -> TransactionReconcileResponseDto.builder()
                             .unmatchedTransaction(dto)
                             .sourceFile("Two")
-                            .build())
-                    .collect(Collectors.toList());
-
-            responseDtos.add(responseDto);
+                            .build()).toList();
+            summaryDto.setFileTwoUnmatchedRecords(summaryDto.getFileTwoUnmatchedRecords() + mapTwoUnmatched.size());
             responseDtos.addAll(mapTwoUnmatched);
-        }
 
-        return responseDtos;
+            summaryDto.setFileTwoTotalRecords(summaryDto.getFileTwoTotalRecords() + mapTwoVal.size());
+            summaryDto.getTransactionReconcileResponseDto().addAll(responseDtos);
+        }
     }
 
-    private List<TransactionReconcileResponseDto> reconcileParsedFiles(Map<String, List<TransactionReconcileDto>> mapOne,
+    private TransactionReconcileSummaryDto reconcileParsedFiles(Map<String, List<TransactionReconcileDto>> mapOne,
                                       Map<String, List<TransactionReconcileDto>> mapTwo) {
-        List<TransactionReconcileResponseDto> responseDtos = new ArrayList<>();
+        TransactionReconcileSummaryDto summaryDto = TransactionReconcileSummaryDto.builder()
+                .fileOneTotalRecords(0)
+                .fileTwoTotalRecords(0)
+                .fileOneUnmatchedRecords(0)
+                .fileTwoUnmatchedRecords(0)
+                .matchingRecords(0)
+                .transactionReconcileResponseDto(new ArrayList<>())
+                .build();
 
         for (Map.Entry<String, List<TransactionReconcileDto>> mapOneEntry : mapOne.entrySet()) {
             String mapOneKey = mapOneEntry.getKey();
             List<TransactionReconcileDto> mapOneVal = mapOneEntry.getValue();
 
-            responseDtos.addAll(weightedCompareLists(mapOneVal, mapTwo.get(mapOneKey)));
+            weightedCompareLists(mapOneVal, mapTwo.get(mapOneKey), summaryDto);
             mapTwo.remove(mapOneKey);
         }
 
         //Add all remaining orphans from mapTwo
         for (List<TransactionReconcileDto> remainingOrphans : mapTwo.values()) {
-            responseDtos.addAll(remainingOrphans.stream()
+            summaryDto.getTransactionReconcileResponseDto().addAll(remainingOrphans.stream()
                     .map(dto -> TransactionReconcileResponseDto.builder()
                             .unmatchedTransaction(dto)
                             .sourceFile("Two")
-                            .build())
-                    .collect(Collectors.toList()));
+                            .build()).toList());
+            summaryDto.setFileTwoUnmatchedRecords(summaryDto.getFileTwoUnmatchedRecords() + remainingOrphans.size());
         }
+        summaryDto.setFileTwoTotalRecords(summaryDto.getFileTwoTotalRecords() + summaryDto.getFileTwoUnmatchedRecords());
 
-
-        return responseDtos;
+        return summaryDto;
     }
 }
