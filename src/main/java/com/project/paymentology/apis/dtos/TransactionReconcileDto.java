@@ -15,7 +15,7 @@ public class TransactionReconcileDto {
 
     private LocalDateTime transactionDate;
 
-    private double transactionAmount;
+    private long transactionAmount;
 
     private String transactionNarrative;
 

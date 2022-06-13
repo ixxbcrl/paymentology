@@ -12,8 +12,8 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TransactionReconcileSummaryDto {
-    private int fileOneTotalRecords;
-    private int fileTwoTotalRecords;
+    private long fileOneTotalRecords;
+    private long fileTwoTotalRecords;
     private int matchingRecords;
     private int fileOneUnmatchedRecords;
     private int fileTwoUnmatchedRecords;
