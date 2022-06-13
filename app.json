@@ -1,0 +1,8 @@
+{
+  "name": "paymentology",
+  "buildpacks": [
+    {
+      "url": "heroku/gradle"
+    }
+  ]
+}
