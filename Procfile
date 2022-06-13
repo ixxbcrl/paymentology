@@ -1,1 +1,1 @@
-web: java $JAVA_OPTS -jar build/libs/paymentology-0.0.1-SNAPSHOT-plain.jar --server.port=$PORT $JAR_OPTS
+web: java -Dserver.port=$PORT $JAVA_OPTS -jar build/libs/*.jar
